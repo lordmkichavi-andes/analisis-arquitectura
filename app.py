@@ -1,15 +1,40 @@
 import logging
 import os
+import re
+
 from flask import Flask, request
 import sib_api_v3_sdk
 
 logging.basicConfig(level=logging.DEBUG)
 app = Flask(__name__)
 
+def parse_paragraph(paragraph):
+    paragraph_html = paragraph.replace('\n', '<br>')
+    return f"<p>{paragraph_html}</p>"
+
+def format_text_as_html(text):
+    paragraphs = text.strip().split("\n\n")
+    html_paragraphs = []
+    for p in paragraphs:
+        if re.match(r"^\d+\.", p.strip()):
+            parts = p.split("\n", 1)
+            title = f"<strong>{parts[0]}</strong>"
+            rest = parts[1].replace('\n', '<br>') if len(parts) > 1 else ""
+            html_paragraphs.append(f"<p>{title}<br>{rest}</p>")
+        else:
+            html_paragraphs.append(parse_paragraph(p))
+    html_content = (
+        "<html>"
+        "<head><meta charset='UTF-8'></head>"
+        "<body>" + "".join(html_paragraphs) + "</body>"
+        "</html>"
+    )
+    return html_content
+
 def send_brevo_email(to_email, subject, html_body):
-    api_key = os.getenv("BREVO_API_KEY", ".....")
-    sender_email = os.getenv("BREVO_SENDER_EMAIL", "lordmkichavi@gmail.com")
-    sender_name = os.getenv("BREVO_SENDER_NAME", "Remitente")
+    api_key = os.getenv("BREVO_API_KEY")
+    sender_email = os.getenv("BREVO_SENDER_EMAIL")
+    sender_name = os.getenv("BREVO_SENDER_NAME")
 
     if not api_key:
         logging.error("Falta la variable de entorno BREVO_API_KEY.")
@@ -42,23 +67,23 @@ def analizar():
 
     contenido = data["contenido"]
     logging.debug("Contenido IA:\n%s", contenido)
+    contenido_html = format_text_as_html(contenido)
 
     if "developer_email" in data:
         send_brevo_email(
             to_email=data["developer_email"],
             subject="Informe de Arquitectura",
-            html_body=contenido
+            html_body=contenido_html
         )
 
     if "leader_email" in data:
         send_brevo_email(
             to_email=data["leader_email"],
             subject="Informe de Arquitectura",
-            html_body=contenido
+            html_body=contenido_html
         )
 
     return "Correo(s) enviado(s) con el contenido.", 200
 
 if __name__ == "__main__":
-    logging.info("Iniciando aplicación en puerto 5011")
-    app.run(debug=True, port=5011)
+    app.run(debug=True, host='0.0.0.0', port=5011, use_reloader=False)
